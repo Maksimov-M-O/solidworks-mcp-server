@@ -312,6 +312,27 @@ def _select(model, name, obj_type, x=0.0, y=0.0, z=0.0, append=False, mark=0):
     return True
 
 
+# Стандартные плоскости: индекс среди RefPlane в дереве (0=Спереди, 1=Сверху, 2=Справа).
+_STD_PLANES = {
+    "спереди": 0, "front": 0, "front plane": 0,
+    "сверху": 1, "top": 1, "top plane": 1,
+    "справа": 2, "right": 2, "right plane": 2,
+}
+
+
+def _resolve_plane(model, name):
+    """Имя плоскости из дерева. Стандартные плоскости понимаются на любом языке
+    ('Спереди'/'Front Plane'/'front' и т.п.): берутся по порядку RefPlane в дереве,
+    поэтому работают при любом языке интерфейса и шаблона."""
+    idx = _STD_PLANES.get(str(name).strip().lower())
+    if idx is None:
+        return name
+    planes = [n for n, _t in _feature_names(model, "RefPlane", limit=500)]
+    if len(planes) > idx:
+        return planes[idx]
+    return name
+
+
 def _feature_names(model, type_filter=None, limit=200):
     """Обход дерева элементов: [(имя, тип), ...]."""
     out = []
@@ -706,15 +727,17 @@ def rebuild(force: bool = False) -> str:
 
 @mcp.tool()
 def create_sketch(plane_name: str = "Спереди") -> str:
-    """Начать эскиз на плоскости ('Спереди'/'Сверху'/'Справа' или 'Front Plane'...
-    в английской версии; можно имя любой плоскости/грани из дерева).
+    """Начать эскиз на плоскости. Стандартные плоскости принимаются на любом языке:
+    'Спереди'/'Сверху'/'Справа', 'Front Plane'/'Top Plane'/'Right Plane' или
+    'front'/'top'/'right' (сервер сам найдёт их в дереве). Можно имя любой другой
+    плоскости/грани из дерева.
 
     Оси эскиза (проверено на SW2024): 'Спереди' — x=X, y=Y модели;
     'Сверху' — x=X, y = МИНУС Z модели (отверстие в точке модели (x,z)
     рисуй в эскизе как (x, -z))."""
     def job():
         model = _model(1)
-        _select(model, plane_name, "PLANE")
+        _select(model, _resolve_plane(model, plane_name), "PLANE")
         model.SketchManager.InsertSketch(True)
         sk = model.SketchManager.ActiveSketch
         if sk is None:
